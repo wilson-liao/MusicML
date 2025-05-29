@@ -182,6 +182,7 @@ model = GPT2LMHeadModel.from_pretrained("gpt2")
 class MusicDataset(Dataset):
     def __init__(self, tokenizer, file_path, block_size):
         self.examples = []
+        self.block_size = block_size
         
         with open(file_path, 'r', encoding='utf-8') as f:
             texts = f.readlines()
@@ -189,8 +190,15 @@ class MusicDataset(Dataset):
         for text in texts:
             # Split genre token and sequence
             parts = text.strip().split()
+            if len(parts) < 2:  # Skip empty or invalid entries
+                continue
+                
             genre = parts[0]  # Get genre token
             sequence = ' '.join(parts[1:])  # Get actual sequence
+            
+            # Skip if sequence is too short
+            if len(sequence.split()) < 10:  # Adjust minimum length as needed
+                continue
             
             encodings = tokenizer(sequence, 
                                 truncation=True,
@@ -198,13 +206,26 @@ class MusicDataset(Dataset):
                                 padding='max_length',
                                 return_tensors='pt')
             
+            # Skip if encoding failed or produced empty tensors
+            if encodings['input_ids'].numel() == 0:
+                continue
+                
             example = {
                 'input_ids': encodings['input_ids'].squeeze(),
                 'attention_mask': encodings['attention_mask'].squeeze(),
                 'labels': encodings['input_ids'].squeeze(),
                 'genre': genre
             }
+            
+            # Verify tensor shapes are correct
+            if (example['input_ids'].size(0) != block_size or 
+                example['attention_mask'].size(0) != block_size or 
+                example['labels'].size(0) != block_size):
+                continue
+                
             self.examples.append(example)
+        
+        print(f"Loaded {len(self.examples)} valid examples out of {len(texts)} total entries")
 
     def __len__(self):
         return len(self.examples)

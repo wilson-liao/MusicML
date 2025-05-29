@@ -38,6 +38,7 @@ ENV/
 *.mid
 *.wav
 *.mp3
+*.png
 dataset/
 dataset_processed/
 
