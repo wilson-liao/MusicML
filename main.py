@@ -3,7 +3,7 @@ import os
 import glob
 import pretty_midi
 import librosa
-from basic_pitch.inference import predict, Model
+from basic_pitch.inference import Model, predict
 from basic_pitch import ICASSP_2022_MODEL_PATH
 from musicPlayer import MusicPlayer
 from miditok import REMI, TokenizerConfig
@@ -11,6 +11,10 @@ from miditoolkit import MidiFile
 from transformers import GPT2TokenizerFast, GPT2LMHeadModel, Trainer, TrainingArguments, TextDataset
 from torch.utils.data import Dataset
 import torch
+import sys
+
+# Add this at the top of your file with other imports
+sys.setrecursionlimit(100000)  # Increase recursion limit
 
 # Download latest version
 path = kagglehub.dataset_download("andradaolteanu/gtzan-dataset-music-genre-classification")
@@ -19,6 +23,9 @@ print("Path to dataset files:", path)
 
 
 basic_pitch_model = Model(ICASSP_2022_MODEL_PATH)
+
+genres = ['blues', 'classical', 'country', 'disco', 'hiphop', 'jazz', 'metal', 'pop', 'reggae', 'rock']
+
 
 def convert_wav_to_midi(wav_path, output_dir):
     # Run prediction
@@ -47,8 +54,8 @@ def batch_convert(folder_path, output_dir):
     for wav_file in wav_files:
         convert_wav_to_midi(wav_file, output_dir)
 # Example usage
-input_folder = "C:/Users/wilso/OneDrive/Desktop/MusicML/gtzan-dataset-music-genre-classification/versions/1/Data/genres_original"
-output_folder = "C:/Users/wilso/OneDrive/Desktop/MusicML/gtzan-dataset-music-genre-classification/versions/1/Data/midi_output"
+input_folder = "Data/genres_original"
+output_folder = "Data/midi_output"
 
 genres = ['blues', 'classical', 'country', 'disco', 'hiphop', 'jazz', 'metal', 'pop', 'reggae', 'rock']
 if not os.path.exists(output_folder):
@@ -61,8 +68,7 @@ if not os.path.exists(output_folder):
 else:
     print("Output folder already exists.")
 
-
-# musicPlayer = MusicPlayer("C:/Users/wilso/OneDrive/Desktop/MusicML/gtzan-dataset-music-genre-classification/versions/1/Data/midi_output/blues/blues.00000.mid")
+# musicPlayer = MusicPlayer("gtzan-dataset-music-genre-classification/versions/1/Data/midi_output/blues/blues.00000.mid")
 # musicPlayer.play_music()
 
 
@@ -71,6 +77,7 @@ config = TokenizerConfig()
 tokenizer = REMI(config)
 dataset_path = "dataset.txt"
 
+a = 0
 def tokenize_midi_folder(midi_folder, output_file):
     genre = midi_folder.split("/")[-1]
     print(f'Tokenizing {genre}...')
@@ -80,9 +87,15 @@ def tokenize_midi_folder(midi_folder, output_file):
         if not midi_path.endswith(".mid"):
             continue
         midi = MidiFile(os.path.join(midi_folder, midi_path))
-        tokens = tokenizer(midi)
-        # Convert tokens to string and add special tokens
-        token_str = f"<|startoftext|>{' '.join(map(str, tokens))}<|endoftext|>"
+        # Add genre token at the start
+        genre_token = f"<|{genre}|>"
+        tokens = tokenizer(midi) # List[TokSequence]
+        # print(f'tokens: {tokens}')
+        # print(f'tokens[0].ids: {tokens[0].ids}')
+        # Convert REMI tokens to their integer values
+        all_sequences = [token for token in tokens[0].ids]
+        # Convert tokens to strings and add special tokens
+        token_str = f"{genre_token} {' '.join(map(str, all_sequences))}"  # Add separator after first sequence
         all_tokens.append(token_str)
 
     # Save token sequences as dataset
@@ -97,11 +110,73 @@ else:
     print(f"Dataset already exists in {dataset_path}")
 
 
+class IdentityTokenizer:
+    def __init__(self):
+        self.pad_token_id = 0
+        self.eos_token_id = 1
+        self.genre_tokens = {f"<|{genre}|>": i + 2 for i, genre in enumerate([
+            'blues', 'classical', 'country', 'disco', 'hiphop', 
+            'jazz', 'metal', 'pop', 'reggae', 'rock'
+        ])}
+        # Increase vocab size to accommodate REMI tokens which can be quite large
+        self.vocab_size = 30000  # Adjust this based on your actual token range
+    
+    def __call__(self, text, **kwargs):
+        parts = text.strip().split()
+        if not parts:
+            return {
+                'input_ids': torch.tensor([[self.pad_token_id]]),
+                'attention_mask': torch.tensor([[1]])
+            }
+
+        # Handle genre token
+        genre_token = parts[0]
+        tokens = [self.genre_tokens.get(genre_token, 0)]
+        
+        # Convert remaining tokens to integers
+        try:
+            tokens.extend(int(t) for t in parts[1:])
+        except ValueError as e:
+            print(f"Error converting tokens: {e}")
+            print(f"Problematic text: {text[:100]}...")  # Print first 100 chars
+            raise
+
+        # Handle padding
+        max_length = kwargs.get('max_length', len(tokens))
+        if kwargs.get('padding') == 'max_length':
+            tokens = tokens[:max_length]  # Truncate if needed
+            tokens.extend([self.pad_token_id] * (max_length - len(tokens)))  # Pad if needed
+
+        input_ids = torch.tensor([tokens])
+        attention_mask = torch.ones(input_ids.shape)
+
+        return {
+            'input_ids': input_ids,
+            'attention_mask': attention_mask,
+        }
+
+    def encode(self, text, return_tensors=None):
+        output = self(text)
+        return output['input_ids']
+
+    def decode(self, token_ids):
+        if isinstance(token_ids, torch.Tensor):
+            token_ids = token_ids.tolist()
+        if isinstance(token_ids[0], list):
+            token_ids = token_ids[0]
+        return ' '.join(map(str, token_ids))
+
+    def save_pretrained(self, path):
+        # No need to save anything for this tokenizer
+        pass
+
+    @classmethod
+    def from_pretrained(cls, path):
+        return cls()
+
 # Set up tokenizer with padding
-tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
-tokenizer.pad_token = tokenizer.eos_token  # Use the EOS token as padding token
+tokenizer = IdentityTokenizer()
 model = GPT2LMHeadModel.from_pretrained("gpt2")
-model.resize_token_embeddings(len(tokenizer))  # Resize model embeddings to match tokenizer
 
 # Create custom dataset class
 class MusicDataset(Dataset):
@@ -112,22 +187,34 @@ class MusicDataset(Dataset):
             texts = f.readlines()
         
         for text in texts:
-            encodings = tokenizer(text.strip(), 
+            # Split genre token and sequence
+            parts = text.strip().split()
+            genre = parts[0]  # Get genre token
+            sequence = ' '.join(parts[1:])  # Get actual sequence
+            
+            encodings = tokenizer(sequence, 
                                 truncation=True,
                                 max_length=block_size,
                                 padding='max_length',
                                 return_tensors='pt')
-            self.examples.append({
+            
+            example = {
                 'input_ids': encodings['input_ids'].squeeze(),
                 'attention_mask': encodings['attention_mask'].squeeze(),
-                'labels': encodings['input_ids'].squeeze()
-            })
+                'labels': encodings['input_ids'].squeeze(),
+                'genre': genre
+            }
+            self.examples.append(example)
 
     def __len__(self):
         return len(self.examples)
 
     def __getitem__(self, idx):
         return self.examples[idx]
+
+
+
+
 
 # Replace TextDataset with our custom dataset
 dataset = MusicDataset(
@@ -168,25 +255,53 @@ trainer = Trainer(
     train_dataset=dataset,
 )
 
-print("Training...")
-# print(dataset[0])
 
-trainer.train()
 
 model_path = "music_transformer"
 
-if not os.path.exists(model_path):
+try:
+    # Try loading model and tokenizer
+    model = GPT2LMHeadModel.from_pretrained(model_path).to(device)
+    tokenizer = IdentityTokenizer.from_pretrained(model_path)
+    print(f"✅ Model loaded from {model_path}")
+except (OSError, FileNotFoundError) as e:
+    print(f"⚠️ Could not load model from {model_path}. Reason: {e}")
+    print("🧠 Starting training...")
+
+    # Train and save
+    trainer.train()
     model.save_pretrained(model_path)
-else:
-    print(f"Model already exists in {model_path}")
+    tokenizer.save_pretrained(model_path)
+    print(f"💾 Model saved to {model_path}")
+
+print("Evaluating...")
+model.eval()
 
 
 input_ids = tokenizer.encode("Genre_jazz", return_tensors="pt")
-sample_output = model.generate(input_ids, max_length=512, temperature=1.0, top_k=50)
+inputs = input_ids.to(device)
+sample_output = model.generate(inputs, max_length=512, temperature=1.0, top_k=50, pad_token_id=tokenizer.eos_token_id)
 decoded = tokenizer.decode(sample_output[0])
 
+# Step 1: Remove special tokens
+decoded_clean = decoded.replace("<|startoftext|>", "").replace("<|endoftext|>", "").strip()
+
+# Step 2: Convert text back into tokens
+token_list = []
+for token in decoded_clean.split():
+    try:
+        token_list.append(int(token))
+    except ValueError:
+        print(f"⚠️ Skipping non-integer token: {token}")
+
+# Step 3: Use REMI tokenizer to decode tokens into MIDI
+remi_tokenizer = REMI(TokenizerConfig())
+midi_obj: MidiFile = remi_tokenizer.decode(token_list)
+
+# Step 4: Save the MIDI
 outputMidiPath = "output.mid"
-decoded.dump(outputMidiPath)
+midi_obj.dump(outputMidiPath)
+
 
 print(f"Output MIDI saved to {outputMidiPath}, playing...")
 musicPlayer = MusicPlayer(outputMidiPath)
