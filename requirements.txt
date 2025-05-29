@@ -1,2 +1,6 @@
 kagglehub
+pygame
 basic-pitch
+miditok
+miditoolkit
+transformers
