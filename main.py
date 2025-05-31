@@ -314,7 +314,7 @@ model.eval()
 
 
 
-genre_to_generate = 'country'
+genre_to_generate = 'classical'
 genre_token = f"<|{genre_to_generate}|>"  # Correct format for genre token
 
 # Create a more structured initial prompt
@@ -340,21 +340,24 @@ max_valid_token = max(valid_tokens)
 min_valid_token = min(valid_tokens)
 print(f"Valid REMI token range: {min_valid_token} to {max_valid_token}")
 
+
+num_input_tokens = 15
+
 # Generation parameters for more distinct outputs
 generation_params = {
     'input_ids': model_input,
-    'max_new_tokens': 10,  # Generate this many new tokens each iteration
+    'max_new_tokens': num_input_tokens,  # Generate this many new tokens each iteration
     'temperature': 0.1,    # Lower temperature for more focused generation
-    'top_k': 50,          # More focused sampling
-    'top_p': 0.92,        # Slightly more focused nucleus sampling
+    # 'top_k': 200,          # More focused sampling
+    # 'top_p': 0.92,        # Slightly more focused nucleus sampling
     'do_sample': True,
     'num_return_sequences': 1,
     'pad_token_id': id_tokenizer.eos_token_id,
-    'repetition_penalty': 1.2,  # Penalize token repetition
+    'repetition_penalty': 1.5,  # Penalize token repetition
 }
 
 # Generate multiple sequences and pick the most diverse one
-num_input_tokens = 10
+
 num_candidates = 3
 goal_length = 500
 all_outputs = []
