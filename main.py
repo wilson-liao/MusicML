@@ -263,7 +263,7 @@ training_args = TrainingArguments(
     output_dir="./music_transformer",
     overwrite_output_dir=True,
     per_device_train_batch_size=8,
-    num_train_epochs=6,
+    num_train_epochs=10,
     logging_steps=100,
     save_steps=500,
     save_total_limit=2,
@@ -314,7 +314,7 @@ model.eval()
 
 
 
-genre_to_generate = 'jazz'
+genre_to_generate = 'country'
 genre_token = f"<|{genre_to_generate}|>"  # Correct format for genre token
 
 # Create a more structured initial prompt
@@ -343,7 +343,7 @@ print(f"Valid REMI token range: {min_valid_token} to {max_valid_token}")
 # Generation parameters for more distinct outputs
 generation_params = {
     'input_ids': model_input,
-    'max_new_tokens': 50,  # Generate this many new tokens each iteration
+    'max_new_tokens': 10,  # Generate this many new tokens each iteration
     'temperature': 0.1,    # Lower temperature for more focused generation
     'top_k': 50,          # More focused sampling
     'top_p': 0.92,        # Slightly more focused nucleus sampling
@@ -354,12 +354,13 @@ generation_params = {
 }
 
 # Generate multiple sequences and pick the most diverse one
+num_input_tokens = 10
 num_candidates = 3
 goal_length = 500
 all_outputs = []
 all_scores = []
 
-print("Generating multiple candidates...")
+print(f"Generating {num_candidates} candidates...")
 for i in range(num_candidates):
     # Clear CUDA cache before each generation
     if torch.cuda.is_available():
@@ -382,8 +383,8 @@ for i in range(num_candidates):
                     valid_output.append(token)
             
             # Update input for next iteration with the last 5 valid tokens
-            if len(valid_output) >= 5:
-                current_input = torch.tensor([valid_output[-5:]]).to(device)
+            if len(valid_output) >= num_input_tokens:
+                current_input = torch.tensor([valid_output[-num_input_tokens:]]).to(device)
             else:
                 current_input = torch.tensor([valid_output]).to(device)
                 
@@ -443,15 +444,9 @@ if all_outputs:
         score = remi_tokenizer.decode([token_list])
         print(f"Score {idx + 1}: {score}")
         
-        output_file = f"output_{idx + 1}.mid"
+        output_file = f"{genre_to_generate}_output_{idx + 1}.mid"
         try:
-            if hasattr(score, 'write'):
-                score.write(output_file)
-            elif hasattr(score, 'dump'):
-                score.dump(output_file)
-            elif hasattr(score, 'save'):
-                score.save(output_file)
-            elif hasattr(score, 'dump_midi'):
+            if hasattr(score, 'dump_midi'):
                 score.dump_midi(output_file)
             else:
                 print(f"Error: Score object for candidate {idx + 1} doesn't have a standard save method")
