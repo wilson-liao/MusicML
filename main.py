@@ -299,10 +299,16 @@ print("Evaluating...")
 model.eval()
 
 
-input_ids = tokenizer.encode("Genre_jazz", return_tensors="pt")
-inputs = input_ids.to(device)
-sample_output = model.generate(inputs, max_length=512, temperature=1.0, top_k=50, pad_token_id=tokenizer.eos_token_id)
+genre_to_generate = 'jazz'
+genre_token = "<|genre_to_generate|>"
+
+model_input = tokenizer.encode(genre_token, return_tensors="pt").to(device)
+print(f'model_input: {model_input}')
+sample_output = model.generate(model_input, max_length=512, temperature=1.0, top_k=50, pad_token_id=tokenizer.eos_token_id)
 decoded = tokenizer.decode(sample_output[0])
+
+print(sample_output)
+# print(decoded)
 
 # Step 1: Remove special tokens
 decoded_clean = decoded.replace("<|startoftext|>", "").replace("<|endoftext|>", "").strip()
@@ -317,7 +323,12 @@ for token in decoded_clean.split():
 
 # Step 3: Use REMI tokenizer to decode tokens into MIDI
 remi_tokenizer = REMI(TokenizerConfig())
-midi_obj: MidiFile = remi_tokenizer.decode(token_list)
+
+score = remi_tokenizer.decode([token_list])
+
+print(f'score: {score.tracks}')
+
+midi_obj = score.from_midi()
 
 # Step 4: Save the MIDI
 outputMidiPath = "output.mid"
