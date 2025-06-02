@@ -23,11 +23,6 @@ class MusicPlayer:
 
 
 if __name__ == "__main__":
-    path = 'C:/Users/wilso/OneDrive/Desktop/MusicML/Data/midi_output/jazz/jazz.00006.mid'
+    path = 'C:/Users/User/Desktop/wilson/MusicML/adl-piano-midi/Rock/Album Rock/Ace Frehley/Fractured Quantum.mid'
     mp = MusicPlayer(path)
     mp.play_music()
-
-
-
-
-

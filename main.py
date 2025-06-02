@@ -39,7 +39,7 @@ def convert_wav_to_midi(wav_path, output_dir):
         base_name = os.path.splitext(os.path.basename(wav_path))[0]
         midi_path = os.path.join(output_dir, f"{base_name}.mid")
         midi_data.write(midi_path)
-        print(f"[✓] Saved: {midi_path}")
+        print(f"[] Saved: {midi_path}")
     except Exception as e:
         print(f"Error: {e}")
 
@@ -289,16 +289,16 @@ try:
     # Try loading model and tokenizer
     model = GPT2LMHeadModel.from_pretrained(model_path).to(device)
     id_tokenizer = IdentityTokenizer.from_pretrained(model_path)
-    print(f"✅ Model loaded from {model_path}")
+    print(f" Model loaded from {model_path}")
 except (OSError, FileNotFoundError) as e:
-    print(f"⚠️ Could not load model from {model_path}. Reason: {e}")
-    print("🧠 Starting training...")
+    print(f"� Could not load model from {model_path}. Reason: {e}")
+    print(">� Starting training...")
 
     # Train and save
     trainer.train()
     model.save_pretrained(model_path)
     id_tokenizer.save_pretrained(model_path)
-    print(f"💾 Model saved to {model_path}")
+    print(f"=� Model saved to {model_path}")
 
 
 
@@ -341,7 +341,8 @@ min_valid_token = min(valid_tokens)
 print(f"Valid REMI token range: {min_valid_token} to {max_valid_token}")
 
 
-num_input_tokens = 15
+num_input_tokens = 5
+
 
 # Generation parameters for more distinct outputs
 generation_params = {
@@ -357,7 +358,6 @@ generation_params = {
 }
 
 # Generate multiple sequences and pick the most diverse one
-
 num_candidates = 3
 goal_length = 500
 all_outputs = []
@@ -486,7 +486,7 @@ else:
 #     try:
 #         token_list.append(int(token))
 #     except ValueError:
-#         print(f"⚠️ Skipping non-integer token: {token}")
+#         print(f"� Skipping non-integer token: {token}")
 
 # print(f'token_list: {token_list}')
 
